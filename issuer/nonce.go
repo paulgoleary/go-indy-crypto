@@ -27,7 +27,7 @@ func MakeNonce() (*Nonce, error) {
 	return &n, nil
 }
 
-func (n *Nonce) Close() {
+func (n *Nonce) Free() {
 	if n.n != nil {
 		C.indy_crypto_cl_nonce_free(n.n)
 		n.n = nil

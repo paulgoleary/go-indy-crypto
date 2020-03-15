@@ -31,7 +31,7 @@ type RevocationRegDef struct {
 	tp unsafe.Pointer
 }
 
-func MakeRevocationRegistryDef(credDef *CredentialDef, maxCredNum uint, issuanceByDefault bool) (*RevocationRegDef, error) {
+func MakeRevocationRegistryDef(credDef *CredDef, maxCredNum uint, issuanceByDefault bool) (*RevocationRegDef, error) {
 	regDef := RevocationRegDef{}
 	var ibd C.int = 0
 	if issuanceByDefault {
@@ -43,7 +43,7 @@ func MakeRevocationRegistryDef(credDef *CredentialDef, maxCredNum uint, issuance
 	return &regDef, nil
 }
 
-func (rrd *RevocationRegDef) Close() {
+func (rrd *RevocationRegDef) Free() {
 	if rrd.pk != nil {
 		C.indy_crypto_cl_revocation_key_public_free(rrd.pk)
 		rrd.pk = nil

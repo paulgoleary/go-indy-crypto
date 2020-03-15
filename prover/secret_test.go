@@ -9,11 +9,11 @@ func TestSecretBasic(t *testing.T) {
 
 	s1, err := MakeMasterSecret()
 	require.NoError(t, err)
-	defer s1.Close()
+	defer s1.Free()
 
 	s2, err := MakeMasterSecret()
 	require.NoError(t, err)
-	defer s2.Close()
+	defer s2.Free()
 
 	s1Json, err := s1.GetJson()
 	require.NoError(t, err)

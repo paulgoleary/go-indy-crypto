@@ -2,11 +2,12 @@ package issuer
 
 import (
 	"fmt"
+	"github.com/paulgoleary/go-indy-crypto/prover"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-func makeTestCredentialDef(t *testing.T) *CredentialDef {
+func makeTestCredentialDef(t *testing.T) *CredDef {
 
 	credBuilder, err := MakeCredSchemaBuilder()
 	require.NoError(t, err)
@@ -29,7 +30,7 @@ func makeTestCredentialDef(t *testing.T) *CredentialDef {
 	credSchema, err := credBuilder.Finalize()
 	require.NoError(t, err)
 	require.NotNil(t, credSchema)
-	defer credSchema.Close()
+	defer credSchema.Free()
 
 	nonCredBuilder, err := MakeNonCredSchemaBuilder()
 	require.NoError(t, err)
@@ -41,7 +42,7 @@ func makeTestCredentialDef(t *testing.T) *CredentialDef {
 	nonCredSchema, err := nonCredBuilder.Finalize()
 	require.NoError(t, err)
 	require.NotNil(t, nonCredSchema)
-	defer nonCredSchema.Close()
+	defer nonCredSchema.Free()
 
 	credDef, err := MakeCredentialDef(credSchema, nonCredSchema, true)
 	require.NoError(t, err)
@@ -53,7 +54,7 @@ func makeTestCredentialDef(t *testing.T) *CredentialDef {
 func TestCredentialBasic(t *testing.T) {
 
 	credDef := makeTestCredentialDef(t)
-	defer credDef.Close()
+	defer credDef.Free()
 
 	testJson := func(f func() (string, error), name string) {
 		pkJsonStr, err := f()
@@ -64,4 +65,27 @@ func TestCredentialBasic(t *testing.T) {
 	testJson(credDef.GetPublicKeyJson, "CRED PUBLIC KEY")
 	testJson(credDef.GetSecretKeyJson, "CRED SECRET KEY")
 	testJson(credDef.GetProofJson, "CRED PROOF")
+}
+
+func TestValuesBasic(t *testing.T) {
+
+	secret, err := prover.MakeMasterSecret()
+
+	valBuilder, err := MakeCredValuesBuilder()
+	require.NoError(t, err)
+	defer valBuilder.Finalize()
+
+	err = valBuilder.AddDecHidden("master_secret", secret.Value)
+	require.NoError(t, err)
+
+	err = valBuilder.AddDecKnownMap(map[string]string {
+		"name": "1139481716457488690172217916278103335",
+		"sex": "5944657099558967239210949258394887428692050081607692519917050011144233115103",
+		"age": "28",
+		"height": "175",
+	})
+
+	credVals, err := valBuilder.Finalize()
+	require.NoError(t, err)
+	defer credVals.Free()
 }

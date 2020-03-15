@@ -13,7 +13,7 @@ func TestRevocationBasic(t *testing.T) {
 	revokeDef, err := MakeRevocationRegistryDef(credDef, 10, false)
 	require.NoError(t, err)
 	require.NotNil(t, revokeDef)
-	defer revokeDef.Close()
+	defer revokeDef.Free()
 
 	testJson := func(f func() (string, error), name string) {
 		pkJsonStr, err := f()

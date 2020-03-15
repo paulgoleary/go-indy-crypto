@@ -10,12 +10,12 @@ func TestNonceBasic(t *testing.T) {
 	n1, err := MakeNonce()
 	require.NoError(t, err)
 	require.NotNil(t, n1)
-	defer n1.Close()
+	defer n1.Free()
 
 	n2, err := MakeNonce()
 	require.NoError(t, err)
 	require.NotNil(t, n1)
-	defer n2.Close()
+	defer n2.Free()
 
 	n1Json, err := n1.GetJson()
 	require.NoError(t, err)

@@ -13,7 +13,11 @@ extern int indy_crypto_cl_master_secret_free(void*);
 
 */
 import "C"
-import "unsafe"
+import (
+	"encoding/json"
+	"fmt"
+	"unsafe"
+)
 
 type MasterSecret struct {
 	n unsafe.Pointer
@@ -27,11 +31,26 @@ func MakeMasterSecret() (*MasterSecret, error) {
 	return &n, nil
 }
 
-func (ms *MasterSecret) Close() {
+func (ms *MasterSecret) Free() {
 	if ms.n != nil {
 		C.indy_crypto_cl_master_secret_free(ms.n)
 		ms.n = nil
 	}
+}
+
+func (ms *MasterSecret) Value() (ret string, err error) {
+	if ret, err = ms.GetJson(); err != nil {
+		return
+	}
+	jsonMap := make(map[string]string)
+	if err = json.Unmarshal([]byte(ret), &jsonMap); err != nil {
+		return
+	}
+	maybeVal, ok := jsonMap["ms"]
+	if !ok {
+		err = fmt.Errorf("invalid - could not find 'ms' attribute in secret json")
+	}
+	return maybeVal, err
 }
 
 func (ms *MasterSecret) GetJson() (string, error) {
