@@ -28,7 +28,6 @@ extern int indy_crypto_cl_credential_key_correctness_proof_free(void*);
 */
 import "C"
 import (
-	"fmt"
 	"unsafe"
 )
 
@@ -52,14 +51,6 @@ type CredentialDef struct {
 	pk unsafe.Pointer
 	sk unsafe.Pointer
 	cp unsafe.Pointer
-}
-
-// TODO: map returns codes to 'common errors' from errors/mod.rs
-func withErr(ret C.int) error {
-	if ret != 0 {
-		return fmt.Errorf("error in indy crypto library function: %v", ret)
-	}
-	return nil
 }
 
 // CredSchemaBuilder

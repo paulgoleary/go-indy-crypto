@@ -1,11 +1,12 @@
 package issuer
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-func TestBasic(t *testing.T) {
+func makeTestCredentialDef(t *testing.T) *CredentialDef {
 
 	credBuilder, err := MakeCredSchemaBuilder()
 	require.NoError(t, err)
@@ -19,6 +20,11 @@ func TestBasic(t *testing.T) {
 	require.NoError(t, err)
 	err = credBuilder.AddAttrib("height")
 	require.NoError(t, err)
+
+	//for i := 0; i < 100; i++ {
+	//	err = credBuilder.AddAttrib(fmt.Sprintf("attrib%v", i))
+	//	require.NoError(t, err)
+	//}
 
 	credSchema, err := credBuilder.Finalize()
 	require.NoError(t, err)
@@ -40,18 +46,22 @@ func TestBasic(t *testing.T) {
 	credDef, err := MakeCredentialDef(credSchema, nonCredSchema, true)
 	require.NoError(t, err)
 	require.NotNil(t, credDef)
+
+	return credDef
+}
+
+func TestBasic(t *testing.T) {
+
+	credDef := makeTestCredentialDef(t)
 	defer credDef.Close()
 
-	pkJsonStr, err := credDef.GetPublicKeyJson()
-	require.NoError(t, err)
-	println(pkJsonStr)
+	testJson := func(f func() (string, error), name string) {
+		pkJsonStr, err := f()
+		require.NoError(t, err)
+		println(fmt.Sprintf("%v, size %v: %v", name, len(pkJsonStr), pkJsonStr))
+	}
 
-	skJsonStr, err := credDef.GetSecretKeyJson()
-	require.NoError(t, err)
-	println(skJsonStr)
-
-	proofJsonStr, err := credDef.GetProofJson()
-	require.NoError(t, err)
-	println(proofJsonStr)
-
+	testJson(credDef.GetPublicKeyJson, "CRED PUBLIC KEY")
+	testJson(credDef.GetSecretKeyJson, "CRED SECRET KEY")
+	testJson(credDef.GetProofJson, "CRED PROOF")
 }
