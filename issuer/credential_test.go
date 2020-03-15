@@ -50,7 +50,7 @@ func makeTestCredentialDef(t *testing.T) *CredentialDef {
 	return credDef
 }
 
-func TestBasic(t *testing.T) {
+func TestCredentialBasic(t *testing.T) {
 
 	credDef := makeTestCredentialDef(t)
 	defer credDef.Close()
