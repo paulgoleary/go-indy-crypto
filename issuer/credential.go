@@ -33,6 +33,16 @@ extern int indy_crypto_cl_credential_values_builder_finalize(void*, void**);
 
 extern int indy_crypto_cl_credential_values_free(void*);
 
+extern int indy_crypto_cl_prover_blind_credential_secrets(void*, void*, void*, void*, void**, void**, void**);
+
+extern int indy_crypto_cl_blinded_credential_secrets_free(void*);
+extern int indy_crypto_cl_credential_secrets_blinding_factors_free(void*);
+extern int indy_crypto_cl_blinded_credential_secrets_correctness_proof_free(void*);
+
+extern int indy_crypto_cl_blinded_credential_secrets_to_json(void*, const char**);
+extern int indy_crypto_cl_credential_secrets_blinding_factors_to_json(void*, const char**);
+extern int indy_crypto_cl_blinded_credential_secrets_correctness_proof_to_json(void*, const char**);
+
 */
 import "C"
 import (
@@ -67,6 +77,12 @@ type CredValuesBuilder struct {
 
 type CredValues struct {
 	cv unsafe.Pointer
+}
+
+type BlindedCredSecrets struct {
+	s  unsafe.Pointer
+	bf unsafe.Pointer
+	cp unsafe.Pointer
 }
 
 // CredSchemaBuilder
@@ -277,4 +293,75 @@ func (cb *CredValuesBuilder) AddDecCommitment(attribName, decValue, decBlindingF
 	factCBytes := C.CBytes([]byte(decBlindingFactor))
 	defer C.free(factCBytes)
 	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_commitment(cb.cb, (*C.char)(nameCBytes), (*C.char)(valCBytes), (*C.char)(factCBytes)))
+}
+
+// BlindedCredSecrets
+
+/// Creates blinded credential secrets for given issuer key and master secret.
+///
+/// Note that blinded credential secrets deallocation must be performed by
+/// calling indy_crypto_cl_blinded_credential_secrets_free.
+///
+/// Note that credential secrets blinding factors deallocation must be performed by
+/// calling indy_crypto_cl_credential_secrets_blinding_factors_free.
+///
+/// Note that blinded credential secrets correctness proof deallocation must be performed by
+/// calling indy_crypto_cl_blinded_credential_secrets_correctness_proof_free.
+///
+/// # Arguments
+/// * `credential_pub_key` - Reference that contains credential public key instance pointer.
+/// * `credential_key_correctness_proof` - Reference that contains credential key correctness proof instance pointer.
+/// * `credential_values` - Reference that contains credential values pointer.
+/// * `credential_nonce` - Reference that contains nonce instance pointer.
+/// * `blinded_credential_secrets_p` - Reference that will contain blinded credential secrets instance pointer.
+/// * `credential_secrets_blinding_factors_p` - Reference that will contain credential secrets blinding factors instance pointer.
+/// * `blinded_credential_secrets_correctness_proof_p` - Reference that will contain blinded credential secrets correctness proof instance pointer.
+func MakeBlindedCredSecrets(credDef *CredDef, credVals *CredValues, credNonce *Nonce) (*BlindedCredSecrets, error) {
+	ret := BlindedCredSecrets{}
+	if err := withErr(C.indy_crypto_cl_prover_blind_credential_secrets(credDef.pk, credDef.cp, credVals.cv, credNonce.n, &ret.s, &ret.bf, &ret.cp)); err != nil {
+		return nil, err
+	}
+	return &ret, nil
+}
+
+func (bc *BlindedCredSecrets) Free() {
+	if bc.s != nil {
+		C.indy_crypto_cl_blinded_credential_secrets_free(bc.s)
+		bc.s = nil
+	}
+	if bc.bf != nil {
+		C.indy_crypto_cl_credential_secrets_blinding_factors_free(bc.bf)
+		bc.bf = nil
+	}
+	if bc.cp != nil {
+		C.indy_crypto_cl_blinded_credential_secrets_correctness_proof_free(bc.cp)
+		bc.cp = nil
+	}
+}
+
+func (bc *BlindedCredSecrets) GetSecretsJson() (string, error) {
+	var jsonCStr *C.char
+	if err := withErr(C.indy_crypto_cl_blinded_credential_secrets_to_json(bc.s, &jsonCStr)); err != nil {
+		return "", err
+	}
+	defer C.free(unsafe.Pointer(jsonCStr))
+	return C.GoString(jsonCStr), nil
+}
+
+func (bc *BlindedCredSecrets) GetBlindingFactorsJson() (string, error) {
+	var jsonCStr *C.char
+	if err := withErr(C.indy_crypto_cl_credential_secrets_blinding_factors_to_json(bc.bf, &jsonCStr)); err != nil {
+		return "", err
+	}
+	defer C.free(unsafe.Pointer(jsonCStr))
+	return C.GoString(jsonCStr), nil
+}
+
+func (bc *BlindedCredSecrets) GetCorrectnessProofJson() (string, error) {
+	var jsonCStr *C.char
+	if err := withErr(C.indy_crypto_cl_blinded_credential_secrets_correctness_proof_to_json(bc.cp, &jsonCStr)); err != nil {
+		return "", err
+	}
+	defer C.free(unsafe.Pointer(jsonCStr))
+	return C.GoString(jsonCStr), nil
 }

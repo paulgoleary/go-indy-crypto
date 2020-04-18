@@ -65,15 +65,29 @@ func TestCredentialBasic(t *testing.T) {
 	testJson(credDef.GetPublicKeyJson, "CRED PUBLIC KEY")
 	testJson(credDef.GetSecretKeyJson, "CRED SECRET KEY")
 	testJson(credDef.GetProofJson, "CRED PROOF")
+
+	credVals, secret := makeTestCredValues(t)
+	defer credVals.Free()
+	defer secret.Free()
+
+	nonce, err := MakeNonce()
+	require.NoError(t, err)
+
+	credSecrets, err := MakeBlindedCredSecrets(credDef, credVals, nonce)
+	require.NoError(t, err)
+	defer credSecrets.Free()
+
+	testJson(credSecrets.GetSecretsJson, "BLINDED CRED SECRETS")
+	testJson(credSecrets.GetBlindingFactorsJson, "BLINDED CRED FACTORS")
+	testJson(credSecrets.GetCorrectnessProofJson, "BLINDED CRED PROOF")
+
 }
 
-func TestValuesBasic(t *testing.T) {
-
+func makeTestCredValues(t *testing.T) (*CredValues, *prover.MasterSecret) {
 	secret, err := prover.MakeMasterSecret()
 
 	valBuilder, err := MakeCredValuesBuilder()
 	require.NoError(t, err)
-	defer valBuilder.Finalize()
 
 	err = valBuilder.AddDecHidden("master_secret", secret.Value)
 	require.NoError(t, err)
@@ -87,5 +101,12 @@ func TestValuesBasic(t *testing.T) {
 
 	credVals, err := valBuilder.Finalize()
 	require.NoError(t, err)
+
+	return credVals, secret
+}
+
+func TestValuesBasic(t *testing.T) {
+	credVals, secret := makeTestCredValues(t)
 	defer credVals.Free()
+	defer secret.Free()
 }
