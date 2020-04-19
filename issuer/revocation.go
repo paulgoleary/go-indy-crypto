@@ -25,6 +25,10 @@ import (
 )
 
 type RevocationRegDef struct {
+	currentIdx        uint
+	maxCredNum        uint
+	issuanceByDefault bool
+
 	pk unsafe.Pointer
 	sk unsafe.Pointer
 	rp unsafe.Pointer
@@ -32,7 +36,7 @@ type RevocationRegDef struct {
 }
 
 func MakeRevocationRegistryDef(credDef *CredDef, maxCredNum uint, issuanceByDefault bool) (*RevocationRegDef, error) {
-	regDef := RevocationRegDef{}
+	regDef := RevocationRegDef{maxCredNum: maxCredNum, issuanceByDefault: issuanceByDefault}
 	var ibd C.int = 0
 	if issuanceByDefault {
 		ibd = 1

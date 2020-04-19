@@ -1,5 +1,7 @@
 package issuer
 
+import "unsafe"
+
 /*
 #cgo LDFLAGS: -L${SRCDIR}/../../../hyperledger/indy-crypto/libindy-crypto/target/debug -lindy_crypto
 #cgo CFLAGS: -I${SRCDIR}/../../../hyperledger/indy-crypto/libindy-crypto/include
@@ -43,11 +45,39 @@ extern int indy_crypto_cl_blinded_credential_secrets_to_json(void*, const char**
 extern int indy_crypto_cl_credential_secrets_blinding_factors_to_json(void*, const char**);
 extern int indy_crypto_cl_blinded_credential_secrets_correctness_proof_to_json(void*, const char**);
 
+// type FFITailTake = extern fn(ctx: *const c_void, idx: u32, tail_p: *mut *const c_void) -> ErrorCode;
+// type FFITailPut = extern fn(ctx: *const c_void, tail: *const c_void) -> ErrorCode;
+
+extern int tail_put(void* _ctx, void* _tail);
+extern int tail_take(void* _ctx, uint32_t idx, void** tail_p);
+
+int tail_put_x(void* _ctx, void* _tail);
+int tail_take_x(void* _ctx, uint32_t idx, void** tail_p);
+
+extern int indy_crypto_cl_issuer_sign_credential_with_revoc(
+	const char*,	// prover_id
+	void*, 			// blinded_credential_secrets
+	void*, 			// blinded_credential_secrets_correctness_proof
+	void*, 			// credential_nonce
+	void*, 			// credential_issuance_nonce
+	void*, 			// credential_values
+	void*, 			// credential_pub_key
+	void*,			// credential_priv_key
+	uint32_t, 		// rev_idx
+	uint32_t,		// max_cred_num
+	char, 			// bool - issuance_by_default
+	void*, 			// rev_reg
+	void*, 			// rev_key_priv
+	void*, 			// ctx_tails
+	void*, 		// take_tail: FFITailTake ???
+	void*, 		// put_tail: FFITailPut ???
+	void**, 		// credential_signature_p
+	void**, 		// credential_signature_correctness_proof_p
+	void** 			// revocation_registry_delta_p
+);
+
 */
 import "C"
-import (
-	"unsafe"
-)
 
 type CredSchemaBuilder struct {
 	sb unsafe.Pointer
@@ -79,10 +109,14 @@ type CredValues struct {
 	cv unsafe.Pointer
 }
 
-type BlindedCredSecrets struct {
+type BlindedSecrets struct {
 	s  unsafe.Pointer
-	bf unsafe.Pointer
 	cp unsafe.Pointer
+}
+
+type BlindedCredSecrets struct {
+	BlindedSecrets
+	bf unsafe.Pointer
 }
 
 // CredSchemaBuilder
@@ -96,9 +130,9 @@ func MakeCredSchemaBuilder() (*CredSchemaBuilder, error) {
 }
 
 func (sb *CredSchemaBuilder) AddAttrib(attribName string) error {
-	nameCBytes := C.CBytes([]byte(attribName))
-	defer C.free(nameCBytes)
-	return withErr(C.indy_crypto_cl_credential_schema_builder_add_attr(sb.sb, (*C.char)(nameCBytes)))
+	nameCStr := C.CString(attribName)
+	defer C.free(unsafe.Pointer(nameCStr))
+	return withErr(C.indy_crypto_cl_credential_schema_builder_add_attr(sb.sb, nameCStr))
 }
 
 func (sb *CredSchemaBuilder) Finalize() (*CredSchema, error) {
@@ -133,9 +167,9 @@ func MakeNonCredSchemaBuilder() (*NonCredSchemaBuilder, error) {
 }
 
 func (sb *NonCredSchemaBuilder) AddAttrib(attribName string) error {
-	nameCBytes := C.CBytes([]byte(attribName))
-	defer C.free(nameCBytes)
-	return withErr(C.indy_crypto_cl_non_credential_schema_builder_add_attr(sb.sb, (*C.char)(nameCBytes)))
+	nameCStr := C.CString(attribName)
+	defer C.free(unsafe.Pointer(nameCStr))
+	return withErr(C.indy_crypto_cl_non_credential_schema_builder_add_attr(sb.sb, nameCStr))
 }
 
 func (sb *NonCredSchemaBuilder) Finalize() (*NonCredSchema, error) {
@@ -216,6 +250,47 @@ func (cd *CredDef) GetProofJson() (string, error) {
 	return C.GoString(jsonCStr), nil
 }
 
+//export tail_put
+func tail_put(_ctx, _tail unsafe.Pointer) C.int {
+	return 0
+}
+
+//export tail_take
+func tail_take(_ctx unsafe.Pointer, idx C.uint32_t, tail_p *unsafe.Pointer) C.int {
+	return 0
+}
+
+func (cd *CredDef) SignWithRevocation(vals *CredValues, secrets *BlindedSecrets, rev *RevocationRegDef, credNonce, issuanceNonce *Nonce, proverDidStr string) error {
+
+	didCStr := C.CString(proverDidStr)
+	defer C.free(unsafe.Pointer(didCStr))
+
+	var credSig, credSigProof, revRegDelta unsafe.Pointer
+
+	var ibd C.char = 0
+	if rev.issuanceByDefault {
+		ibd = 1
+	}
+
+	rev.currentIdx++ // TODO: not sure this is right ...?
+
+	maybeTails := make([]byte, 0)
+
+	if err := withErr(C.indy_crypto_cl_issuer_sign_credential_with_revoc(
+		didCStr,
+		secrets.s, secrets.cp,
+		credNonce.n,
+		issuanceNonce.n,
+		vals.cv,
+		cd.pk, cd.sk,
+		C.uint32_t(rev.currentIdx), C.uint32_t(rev.maxCredNum), ibd, rev.rp, rev.sk,
+		unsafe.Pointer(&maybeTails) /* ctx_tails? */, C.tail_take_x, C.tail_put_x,
+		&credSig, &credSigProof, &revRegDelta)); err != nil {
+		return err
+	}
+	return nil
+}
+
 // CredValuesBuilder + CredValues
 
 func MakeCredValuesBuilder() (*CredValuesBuilder, error) {
@@ -246,20 +321,20 @@ func (cv *CredValues) Free() {
 }
 
 func (cb *CredValuesBuilder) AddDecKnown(attribName, attribValue string) error {
-	nameCBytes := C.CBytes([]byte(attribName))
-	defer C.free(nameCBytes)
-	valCBytes := C.CBytes([]byte(attribValue))
-	defer C.free(valCBytes)
-	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_known(cb.cb, (*C.char)(nameCBytes), (*C.char)(valCBytes)))
+	nameCStr := C.CString(attribName)
+	defer C.free(unsafe.Pointer(nameCStr))
+	valCStr := C.CString(attribValue)
+	defer C.free(unsafe.Pointer(valCStr))
+	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_known(cb.cb, nameCStr, valCStr))
 }
 
 func (cb *CredValuesBuilder) AddDecKnownMap(valsMap map[string]string) error {
 	for attribName, attribValue := range valsMap {
-		nameCBytes := C.CBytes([]byte(attribName))
-		defer C.free(nameCBytes)
-		valCBytes := C.CBytes([]byte(attribValue))
-		defer C.free(valCBytes)
-		if err := withErr(C.indy_crypto_cl_credential_values_builder_add_dec_known(cb.cb, (*C.char)(nameCBytes), (*C.char)(valCBytes))); err != nil {
+		nameCStr := C.CString(attribName)
+		defer C.free(unsafe.Pointer(nameCStr))
+		valCStr := C.CString(attribValue)
+		defer C.free(unsafe.Pointer(valCStr))
+		if err := withErr(C.indy_crypto_cl_credential_values_builder_add_dec_known(cb.cb, nameCStr, valCStr)); err != nil {
 			return err
 		}
 	}
@@ -267,15 +342,15 @@ func (cb *CredValuesBuilder) AddDecKnownMap(valsMap map[string]string) error {
 }
 
 func (cb *CredValuesBuilder) AddDecHidden(attribName string, valGetter func() (string, error)) error {
-	nameCBytes := C.CBytes([]byte(attribName))
-	defer C.free(nameCBytes)
+	nameCStr := C.CString(attribName)
+	defer C.free(unsafe.Pointer(nameCStr))
 	attribValue, err := valGetter()
 	if err != nil {
 		return err
 	}
-	valCBytes := C.CBytes([]byte(attribValue))
-	defer C.free(valCBytes)
-	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_hidden(cb.cb, (*C.char)(nameCBytes), (*C.char)(valCBytes)))
+	valCStr := C.CString(attribValue)
+	defer C.free(unsafe.Pointer(valCStr))
+	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_hidden(cb.cb, nameCStr, valCStr))
 }
 
 /// Adds new hidden attribute dec_value to credential values map.
@@ -286,13 +361,13 @@ func (cb *CredValuesBuilder) AddDecHidden(attribName string, valGetter func() (s
 /// * `dec_value` - Credential attr dec_value. Decimal BigNum representation as null terminated string.
 /// * `dec_blinding_factor` - Credential blinding factor. Decimal BigNum representation as null terminated string
 func (cb *CredValuesBuilder) AddDecCommitment(attribName, decValue, decBlindingFactor string) error {
-	nameCBytes := C.CBytes([]byte(attribName))
-	defer C.free(nameCBytes)
-	valCBytes := C.CBytes([]byte(decValue))
-	defer C.free(valCBytes)
-	factCBytes := C.CBytes([]byte(decBlindingFactor))
-	defer C.free(factCBytes)
-	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_commitment(cb.cb, (*C.char)(nameCBytes), (*C.char)(valCBytes), (*C.char)(factCBytes)))
+	nameCStr := C.CString(attribName)
+	defer C.free(unsafe.Pointer(nameCStr))
+	valCStr := C.CString(decValue)
+	defer C.free(unsafe.Pointer(valCStr))
+	factCStr := C.CString(decBlindingFactor)
+	defer C.free(unsafe.Pointer(factCStr))
+	return withErr(C.indy_crypto_cl_credential_values_builder_add_dec_commitment(cb.cb, nameCStr, valCStr, factCStr))
 }
 
 // BlindedCredSecrets
@@ -364,4 +439,8 @@ func (bc *BlindedCredSecrets) GetCorrectnessProofJson() (string, error) {
 	}
 	defer C.free(unsafe.Pointer(jsonCStr))
 	return C.GoString(jsonCStr), nil
+}
+
+func (bc *BlindedCredSecrets) Values() *BlindedSecrets {
+	return &bc.BlindedSecrets
 }

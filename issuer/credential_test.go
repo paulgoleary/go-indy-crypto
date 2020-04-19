@@ -2,6 +2,7 @@ package issuer
 
 import (
 	"fmt"
+	go_indy_crypto "github.com/paulgoleary/go-indy-crypto"
 	"github.com/paulgoleary/go-indy-crypto/prover"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -70,16 +71,34 @@ func TestCredentialBasic(t *testing.T) {
 	defer credVals.Free()
 	defer secret.Free()
 
-	nonce, err := MakeNonce()
+	credNonce, err := MakeNonce()
 	require.NoError(t, err)
 
-	credSecrets, err := MakeBlindedCredSecrets(credDef, credVals, nonce)
+	credSecrets, err := MakeBlindedCredSecrets(credDef, credVals, credNonce)
 	require.NoError(t, err)
 	defer credSecrets.Free()
 
 	testJson(credSecrets.GetSecretsJson, "BLINDED CRED SECRETS")
 	testJson(credSecrets.GetBlindingFactorsJson, "BLINDED CRED FACTORS")
 	testJson(credSecrets.GetCorrectnessProofJson, "BLINDED CRED PROOF")
+
+	issuanceNonce, err := MakeNonce()
+	require.NoError(t, err)
+
+	proverDidStr := "CnEDk9HrMnmiHXEV1WFgbVCRteYnPqsJwrTdcZaNhFVW" // TODO: HUH?
+
+	revokeDef, err := MakeRevocationRegistryDef(credDef, 10, false)
+	require.NoError(t, err)
+
+	testJson(revokeDef.GetPublicKeyJson, "REVOKE PUBLIC KEY")
+	testJson(revokeDef.GetSecretKeyJson, "REVOKE SECRET KEY")
+	testJson(revokeDef.GetRevocationRegJson, "REVOKE REG DEF")
+	testJson(revokeDef.GetRevocationTailsGenJson, "REVOKE TAILS GEN")
+
+	go_indy_crypto.InitEnvLogging("trace")
+
+	err = credDef.SignWithRevocation(credVals, credSecrets.Values(), revokeDef, credNonce, issuanceNonce, proverDidStr)
+	require.NoError(t, err)
 
 }
 
@@ -92,10 +111,10 @@ func makeTestCredValues(t *testing.T) (*CredValues, *prover.MasterSecret) {
 	err = valBuilder.AddDecHidden("master_secret", secret.Value)
 	require.NoError(t, err)
 
-	err = valBuilder.AddDecKnownMap(map[string]string {
-		"name": "1139481716457488690172217916278103335",
-		"sex": "5944657099558967239210949258394887428692050081607692519917050011144233115103",
-		"age": "28",
+	err = valBuilder.AddDecKnownMap(map[string]string{
+		"name":   "1139481716457488690172217916278103335",
+		"sex":    "5944657099558967239210949258394887428692050081607692519917050011144233115103",
+		"age":    "28",
 		"height": "175",
 	})
 
