@@ -18,6 +18,9 @@ extern int indy_crypto_cl_revocation_registry_free(void*);
 extern int indy_crypto_cl_revocation_tails_generator_to_json(void*, const char**);
 extern int indy_crypto_cl_revocation_tails_generator_free(void*);
 
+extern int indy_crypto_cl_tails_generator_count(void*, uint32_t*);
+extern int indy_crypto_cl_tails_generator_next(void*, void**);
+
 */
 import "C"
 import (
@@ -100,4 +103,20 @@ func (rrd *RevocationRegDef) GetRevocationTailsGenJson() (string, error) {
 	}
 	defer C.free(unsafe.Pointer(jsonCStr))
 	return C.GoString(jsonCStr), nil
+}
+
+func (rrd *RevocationRegDef) RevocationTailsCount() (int, error) {
+	var cnt C.uint32_t
+	if err := withErr(C.indy_crypto_cl_tails_generator_count(rrd.tp, &cnt)); err != nil {
+		return 0, err
+	}
+	return int(cnt), nil
+}
+
+func (rrd *RevocationRegDef) RevocationTailsNext() (*Tail, error) {
+	t := Tail{}
+	if err := withErr(C.indy_crypto_cl_tails_generator_next(rrd.tp, &t.T)); err != nil {
+		return nil, err
+	}
+	return &t, nil
 }

@@ -7,6 +7,9 @@ import "fmt"
 // CommonInvalidParam1 = 100,
 // CommonInvalidParam12 = 111,
 
+const ErrorCodeSuccess = 0
+const ErrorCodeAbjectFailure = -1
+
 func WithErr(ret int) error {
 	if ret != 0 {
 		if ret >= 100 && ret <= 111 {

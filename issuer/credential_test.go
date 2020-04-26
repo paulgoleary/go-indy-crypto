@@ -2,7 +2,6 @@ package issuer
 
 import (
 	"fmt"
-	go_indy_crypto "github.com/paulgoleary/go-indy-crypto"
 	"github.com/paulgoleary/go-indy-crypto/prover"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -95,10 +94,19 @@ func TestCredentialBasic(t *testing.T) {
 	testJson(revokeDef.GetRevocationRegJson, "REVOKE REG DEF")
 	testJson(revokeDef.GetRevocationTailsGenJson, "REVOKE TAILS GEN")
 
-	go_indy_crypto.InitEnvLogging("trace")
+	// go_indy_crypto.InitEnvLogging("trace")
 
-	err = credDef.SignWithRevocation(credVals, credSecrets.Values(), revokeDef, credNonce, issuanceNonce, proverDidStr)
+	sts, err := MakeSimpleTailsStorage(revokeDef)
 	require.NoError(t, err)
+
+	sig, err := credDef.SignWithRevocation(credVals, credSecrets.Values(), revokeDef, sts.GetContext(), credNonce, issuanceNonce, proverDidStr)
+	require.NoError(t, err)
+
+	w, err := NewWitness(sig, sts.GetContext())
+	require.NoError(t, err)
+	defer w.Free()
+
+	sts.Close()
 
 }
 

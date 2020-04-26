@@ -45,12 +45,6 @@ extern int indy_crypto_cl_blinded_credential_secrets_to_json(void*, const char**
 extern int indy_crypto_cl_credential_secrets_blinding_factors_to_json(void*, const char**);
 extern int indy_crypto_cl_blinded_credential_secrets_correctness_proof_to_json(void*, const char**);
 
-// type FFITailTake = extern fn(ctx: *const c_void, idx: u32, tail_p: *mut *const c_void) -> ErrorCode;
-// type FFITailPut = extern fn(ctx: *const c_void, tail: *const c_void) -> ErrorCode;
-
-extern int tail_put(void* _ctx, void* _tail);
-extern int tail_take(void* _ctx, uint32_t idx, void** tail_p);
-
 int tail_put_x(void* _ctx, void* _tail);
 int tail_take_x(void* _ctx, uint32_t idx, void** tail_p);
 
@@ -69,8 +63,8 @@ extern int indy_crypto_cl_issuer_sign_credential_with_revoc(
 	void*, 			// rev_reg
 	void*, 			// rev_key_priv
 	void*, 			// ctx_tails
-	void*, 		// take_tail: FFITailTake ???
-	void*, 		// put_tail: FFITailPut ???
+	void*, 			// take_tail: FFITailTake ???
+	void*, 			// put_tail: FFITailPut ???
 	void**, 		// credential_signature_p
 	void**, 		// credential_signature_correctness_proof_p
 	void** 			// revocation_registry_delta_p
@@ -117,6 +111,13 @@ type BlindedSecrets struct {
 type BlindedCredSecrets struct {
 	BlindedSecrets
 	bf unsafe.Pointer
+}
+
+type CredSig struct {
+	revIdx uint
+	cs     unsafe.Pointer
+	cp     unsafe.Pointer
+	rd     unsafe.Pointer
 }
 
 // CredSchemaBuilder
@@ -250,22 +251,11 @@ func (cd *CredDef) GetProofJson() (string, error) {
 	return C.GoString(jsonCStr), nil
 }
 
-//export tail_put
-func tail_put(_ctx, _tail unsafe.Pointer) C.int {
-	return 0
-}
-
-//export tail_take
-func tail_take(_ctx unsafe.Pointer, idx C.uint32_t, tail_p *unsafe.Pointer) C.int {
-	return 0
-}
-
-func (cd *CredDef) SignWithRevocation(vals *CredValues, secrets *BlindedSecrets, rev *RevocationRegDef, credNonce, issuanceNonce *Nonce, proverDidStr string) error {
+func (cd *CredDef) SignWithRevocation(vals *CredValues, secrets *BlindedSecrets, rev *RevocationRegDef, tailsCxt *TailsContext,
+	credNonce, issuanceNonce *Nonce, proverDidStr string) (*CredSig, error) {
 
 	didCStr := C.CString(proverDidStr)
 	defer C.free(unsafe.Pointer(didCStr))
-
-	var credSig, credSigProof, revRegDelta unsafe.Pointer
 
 	var ibd C.char = 0
 	if rev.issuanceByDefault {
@@ -274,7 +264,7 @@ func (cd *CredDef) SignWithRevocation(vals *CredValues, secrets *BlindedSecrets,
 
 	rev.currentIdx++ // TODO: not sure this is right ...?
 
-	maybeTails := make([]byte, 0)
+	sig := CredSig{revIdx: rev.currentIdx}
 
 	if err := withErr(C.indy_crypto_cl_issuer_sign_credential_with_revoc(
 		didCStr,
@@ -284,11 +274,11 @@ func (cd *CredDef) SignWithRevocation(vals *CredValues, secrets *BlindedSecrets,
 		vals.cv,
 		cd.pk, cd.sk,
 		C.uint32_t(rev.currentIdx), C.uint32_t(rev.maxCredNum), ibd, rev.rp, rev.sk,
-		unsafe.Pointer(&maybeTails) /* ctx_tails? */, C.tail_take_x, C.tail_put_x,
-		&credSig, &credSigProof, &revRegDelta)); err != nil {
-		return err
+		tailsCxt.TC, C.tail_take_x, C.tail_put_x,
+		&sig.cs, &sig.cp, &sig.rd)); err != nil {
+		return nil, err
 	}
-	return nil
+	return &sig, nil
 }
 
 // CredValuesBuilder + CredValues
